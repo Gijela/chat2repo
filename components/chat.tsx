@@ -30,7 +30,7 @@ export function Chat({
   selectedChatModel: string;
   selectedVisibilityType: VisibilityType;
   isReadonly: boolean;
-  repoInfo: RepoParams;
+  repoInfo?: RepoParams;
 }) {
   const { mutate } = useSWRConfig();
 

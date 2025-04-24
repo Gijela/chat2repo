@@ -10,7 +10,7 @@ export interface RepoParams {
   slug?: string[];
 }
 
-export default async function Page({ params }: { params: RepoParams }) {
+export default async function Page({ params }: { params: Promise<RepoParams> }) {
   const id = generateUUID();
   const repoInfo = await params;
 
