@@ -1,8 +1,10 @@
 import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 import { Chat } from '@/components/chat';
 import { DEFAULT_CHAT_MODEL } from '@/lib/ai/models';
 import { generateUUID } from '@/lib/utils';
 import { DataStreamHandler } from '@/components/data-stream-handler';
+import { auth } from '@/app/(auth)/auth';
 
 export interface RepoParams {
   owner?: string;
@@ -11,6 +13,11 @@ export interface RepoParams {
 }
 
 export default async function Page({ params }: { params: Promise<RepoParams> }) {
+  const session = await auth();
+  if (!session) {
+    redirect('/login');
+  }
+
   const id = generateUUID();
   const repoInfo = await params;
 
