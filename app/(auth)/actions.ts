@@ -1,7 +1,5 @@
 'use server';
 
-export const dynamic = 'force-dynamic';
-
 import { z } from 'zod';
 
 import { createUser, getUser } from '@/lib/db/queries';

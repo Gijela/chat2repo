@@ -10,7 +10,6 @@ import { SubmitButton } from '@/components/submit-button';
 import { register, type RegisterActionState } from '../actions';
 import { toast } from '@/components/toast';
 
-export const dynamic = 'force-dynamic';
 
 export default function Page() {
   const router = useRouter();
