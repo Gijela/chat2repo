@@ -1,3 +1,4 @@
+import { Octokit } from "octokit";
 import type { CoreAssistantMessage, CoreToolMessage, UIMessage } from 'ai';
 import { type ClassValue, clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -73,3 +74,7 @@ export function getTrailingMessageId({
 
   return trailingMessage.id;
 }
+
+export const gh = new Octokit({
+  auth: process.env.GITHUB_TOKEN!,
+});

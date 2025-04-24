@@ -2,7 +2,7 @@
 
 import type { Attachment, UIMessage } from 'ai';
 import { useChat } from '@ai-sdk/react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import useSWR, { useSWRConfig } from 'swr';
 import { ChatHeader } from '@/components/chat-header';
 import type { Vote } from '@/lib/db/schema';
@@ -15,6 +15,7 @@ import { useArtifactSelector } from '@/hooks/use-artifact';
 import { toast } from 'sonner';
 import { unstable_serialize } from 'swr/infinite';
 import { getChatHistoryPaginationKey } from './sidebar-history';
+import { RepoParams } from '@/app/(chat)/[owner]/[repo]/[[...slug]]/page';
 
 export function Chat({
   id,
@@ -22,12 +23,14 @@ export function Chat({
   selectedChatModel,
   selectedVisibilityType,
   isReadonly,
+  repoInfo,
 }: {
   id: string;
   initialMessages: Array<UIMessage>;
   selectedChatModel: string;
   selectedVisibilityType: VisibilityType;
   isReadonly: boolean;
+  repoInfo: RepoParams;
 }) {
   const { mutate } = useSWRConfig();
 
@@ -64,6 +67,19 @@ export function Chat({
   const [attachments, setAttachments] = useState<Array<Attachment>>([]);
   const isArtifactVisible = useArtifactSelector((state) => state.isVisible);
 
+  useEffect(() => {
+    if (repoInfo && status === 'ready' && messages.length <= initialMessages.length) {
+      const defaultPrompt = `I want to know about the Github repository ${repoInfo.owner}/${repoInfo.repo}`;
+      append({
+        role: 'user',
+        content: defaultPrompt, 
+        parts: [{ type: 'text', text: defaultPrompt }],
+      });
+      // turn /[owner]/[repo] url to /chat/[id] url
+      window.history.replaceState({}, '', `/chat/${id}`);
+    }
+  }, [repoInfo, status, messages.length, initialMessages, append]);
+  
   return (
     <>
       <div className="flex flex-col min-w-0 h-dvh bg-background">

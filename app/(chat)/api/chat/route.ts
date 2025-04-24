@@ -1,12 +1,12 @@
 import {
-  type UIMessage,
+  UIMessage,
   appendResponseMessages,
   createDataStreamResponse,
-  smoothStream,
-  streamText,
+  // smoothStream,
+  // streamText,
 } from 'ai';
 import { auth } from '@/app/(auth)/auth';
-import { systemPrompt } from '@/lib/ai/prompts';
+// import { systemPrompt } from '@/lib/ai/prompts';
 import {
   deleteChatById,
   getChatById,
@@ -17,23 +17,28 @@ import {
   generateUUID,
   getMostRecentUserMessage,
   getTrailingMessageId,
+  // getTrailingMessageId,
 } from '@/lib/utils';
 import { generateTitleFromUserMessage } from '../../actions';
-import { createDocument } from '@/lib/ai/tools/create-document';
-import { updateDocument } from '@/lib/ai/tools/update-document';
-import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
-import { getWeather } from '@/lib/ai/tools/get-weather';
+// import { createDocument } from '@/lib/ai/tools/create-document';
+// import { updateDocument } from '@/lib/ai/tools/update-document';
+// import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
+// import { getWeather } from '@/lib/ai/tools/get-weather';
 import { isProductionEnvironment } from '@/lib/constants';
-import { myProvider } from '@/lib/ai/providers';
+// import { myProvider } from '@/lib/ai/providers';
+import { mastra } from '@/mastra';
 
 export const maxDuration = 60;
 
+const agent = mastra.getAgent('agent');
+
 export async function POST(request: Request) {
+  const encoder = new TextEncoder();
   try {
     const {
       id,
       messages,
-      selectedChatModel,
+      // selectedChatModel,
     }: {
       id: string;
       messages: Array<UIMessage>;
@@ -42,7 +47,7 @@ export async function POST(request: Request) {
 
     const session = await auth();
 
-    if (!session?.user?.id) {
+    if (!session || !session.user || !session.user.id) {
       return new Response('Unauthorized', { status: 401 });
     }
 
@@ -62,7 +67,7 @@ export async function POST(request: Request) {
       await saveChat({ id, userId: session.user.id, title });
     } else {
       if (chat.userId !== session.user.id) {
-        return new Response('Forbidden', { status: 403 });
+        return new Response('Unauthorized', { status: 401 });
       }
     }
 
@@ -79,86 +84,70 @@ export async function POST(request: Request) {
       ],
     });
 
+    const userMessageContent = userMessage.parts
+        .filter((part): part is Extract<UIMessage['parts'][number], { type: 'text' }> => part.type === 'text')
+        .map((part) => part.text)
+        .join('\n');
+
     return createDataStreamResponse({
-      execute: (dataStream) => {
-        const result = streamText({
-          model: myProvider.languageModel(selectedChatModel),
-          system: systemPrompt({ selectedChatModel }),
-          messages,
-          maxSteps: 5,
-          experimental_activeTools:
-            selectedChatModel === 'chat-model-reasoning'
-              ? []
-              : [
-                  'getWeather',
-                  'createDocument',
-                  'updateDocument',
-                  'requestSuggestions',
-                ],
-          experimental_transform: smoothStream({ chunking: 'word' }),
-          experimental_generateMessageId: generateUUID,
-          tools: {
-            getWeather,
-            createDocument: createDocument({ session, dataStream }),
-            updateDocument: updateDocument({ session, dataStream }),
-            requestSuggestions: requestSuggestions({
-              session,
-              dataStream,
-            }),
-          },
-          onFinish: async ({ response }) => {
-            if (session.user?.id) {
-              try {
-                const assistantId = getTrailingMessageId({
-                  messages: response.messages.filter(
-                    (message) => message.role === 'assistant',
-                  ),
-                });
+      execute: async (dataStream) => {
+        const streamResult = await agent.stream(
+          [userMessageContent],
+          { 
+            runId: id, 
+            experimental_generateMessageId: generateUUID, // assistantId needed UUID format to save to pg
+            onFinish: async ({ response }) => {
+              if (session.user?.id) {
+                try {
+                  const assistantId = getTrailingMessageId({
+                    messages: response.messages.filter(
+                      (message) => message.role === 'assistant',
+                    ),
+                  });
 
-                if (!assistantId) {
-                  throw new Error('No assistant message found!');
+                  if (!assistantId) {
+                    throw new Error('No assistant message found!');
+                  }
+  
+                  const [, assistantMessage] = appendResponseMessages({
+                    messages: [userMessage],
+                    responseMessages: response.messages,
+                  });
+  
+                  await saveMessages({
+                    messages: [
+                      {
+                        id: assistantId,
+                        chatId: id,
+                        role: assistantMessage.role,
+                        parts: assistantMessage.parts,
+                        attachments:
+                          assistantMessage.experimental_attachments ?? [],
+                        createdAt: new Date(),
+                      },
+                    ],
+                  });
+                } catch (_) {
+                  console.error('Failed to save chat');
                 }
-
-                const [, assistantMessage] = appendResponseMessages({
-                  messages: [userMessage],
-                  responseMessages: response.messages,
-                });
-
-                await saveMessages({
-                  messages: [
-                    {
-                      id: assistantId,
-                      chatId: id,
-                      role: assistantMessage.role,
-                      parts: assistantMessage.parts,
-                      attachments:
-                        assistantMessage.experimental_attachments ?? [],
-                      createdAt: new Date(),
-                    },
-                  ],
-                });
-              } catch (_) {
-                console.error('Failed to save chat');
               }
-            }
+            },
           },
-          experimental_telemetry: {
-            isEnabled: isProductionEnvironment,
-            functionId: 'stream-text',
-          },
-        });
+        );
 
-        result.consumeStream();
+        streamResult.consumeStream();
 
-        result.mergeIntoDataStream(dataStream, {
+        streamResult.mergeIntoDataStream(dataStream, {
           sendReasoning: true,
         });
       },
-      onError: () => {
-        return 'Oops, an error occurred!';
+      onError: (error) => {
+        console.error("DataStreamResponse error:", error);
+        return 'Oops, an error occurred initiating the chat stream!';
       },
     });
   } catch (error) {
+     console.error("POST handler error:", error);
     return new Response('An error occurred while processing your request!', {
       status: 500,
     });
@@ -175,21 +164,22 @@ export async function DELETE(request: Request) {
 
   const session = await auth();
 
-  if (!session?.user?.id) {
+  if (!session || !session.user) {
     return new Response('Unauthorized', { status: 401 });
   }
 
   try {
     const chat = await getChatById({ id });
 
-    if (chat.userId !== session.user.id) {
-      return new Response('Forbidden', { status: 403 });
+    if (!chat || chat.userId !== session.user.id) {
+      return new Response('Unauthorized or Chat Not Found', { status: 401 });
     }
 
-    const deletedChat = await deleteChatById({ id });
+    await deleteChatById({ id });
 
-    return Response.json(deletedChat, { status: 200 });
+    return new Response('Chat deleted', { status: 200 });
   } catch (error) {
+     console.error("DELETE handler error:", error);
     return new Response('An error occurred while processing your request!', {
       status: 500,
     });

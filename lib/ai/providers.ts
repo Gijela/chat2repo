@@ -12,26 +12,37 @@ import {
   titleModel,
 } from './models.test';
 
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+
+const deepseek = createOpenAICompatible({
+  baseURL: 'https://api.deepseek.com/v1',
+  name: 'deepseek',
+  headers: {
+    Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`,
+  },
+});
+const deepseekChatModel = deepseek.chatModel('deepseek-chat') as any;
+
 export const myProvider = isTestEnvironment
   ? customProvider({
       languageModels: {
-        'chat-model': chatModel,
-        'chat-model-reasoning': reasoningModel,
-        'title-model': titleModel,
-        'artifact-model': artifactModel,
+        'chat-model': deepseekChatModel,
+        'chat-model-reasoning': deepseekChatModel,
+        'title-model': deepseekChatModel,
+        'artifact-model': deepseekChatModel,
       },
     })
   : customProvider({
       languageModels: {
-        'chat-model': xai('grok-2-1212'),
+        'chat-model': deepseekChatModel,
         'chat-model-reasoning': wrapLanguageModel({
-          model: xai('grok-3-mini-beta'),
+          model: deepseekChatModel,
           middleware: extractReasoningMiddleware({ tagName: 'think' }),
         }),
-        'title-model': xai('grok-2-1212'),
-        'artifact-model': xai('grok-2-1212'),
+        'title-model': deepseekChatModel,
+        'artifact-model': deepseekChatModel,
       },
       imageModels: {
-        'small-model': xai.image('grok-2-image'),
+        'small-model': deepseekChatModel,
       },
     });

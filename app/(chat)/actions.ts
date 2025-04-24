@@ -10,11 +10,21 @@ import {
 } from '@/lib/db/queries';
 import { VisibilityType } from '@/components/visibility-selector';
 import { myProvider } from '@/lib/ai/providers';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 
 export async function saveChatModelAsCookie(model: string) {
   const cookieStore = await cookies();
   cookieStore.set('chat-model', model);
 }
+
+const deepseek = createOpenAICompatible({
+  baseURL: 'https://api.deepseek.com/v1',
+  name: 'deepseek',
+  headers: {
+    Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`,
+  },
+});
+const deepseekModel = deepseek.chatModel('deepseek-chat') as any;
 
 export async function generateTitleFromUserMessage({
   message,
@@ -22,7 +32,8 @@ export async function generateTitleFromUserMessage({
   message: Message;
 }) {
   const { text: title } = await generateText({
-    model: myProvider.languageModel('title-model'),
+    // model: myProvider.languageModel('title-model'),
+    model: deepseekModel,
     system: `\n
     - you will generate a short title based on the first message a user begins a conversation with
     - ensure it is not more than 80 characters long
