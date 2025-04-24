@@ -6,9 +6,9 @@ import { ThemeProvider } from '@/components/theme-provider';
 import './globals.css';
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://chat.vercel.ai'),
-  title: 'Next.js Chatbot Template',
-  description: 'Next.js chatbot template using the AI SDK.',
+  metadataBase: new URL('https://github101.com'),
+  title: 'Chat2Repo: Interact with Your GitHub Repository',
+  description: 'Chat with your GitHub repository online using AI Agents',
 };
 
 export const viewport = {
