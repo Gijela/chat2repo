@@ -1,98 +1,111 @@
 import {
-  UIMessage,
+  appendClientMessage,
   appendResponseMessages,
   createDataStreamResponse,
-  // smoothStream,
-  // streamText,
+  smoothStream,
+  streamText,
 } from 'ai';
-import { auth } from '@/app/(auth)/auth';
-// import { systemPrompt } from '@/lib/ai/prompts';
+import { auth, type UserType } from '@/app/(auth)/auth';
+import { systemPrompt } from '@/lib/ai/prompts';
 import {
   deleteChatById,
   getChatById,
+  getMessageCountByUserId,
+  getMessagesByChatId,
   saveChat,
   saveMessages,
 } from '@/lib/db/queries';
-import {
-  generateUUID,
-  getMostRecentUserMessage,
-  getTrailingMessageId,
-  // getTrailingMessageId,
-} from '@/lib/utils';
+import { generateUUID, getTrailingMessageId } from '@/lib/utils';
 import { generateTitleFromUserMessage } from '../../actions';
-// import { createDocument } from '@/lib/ai/tools/create-document';
-// import { updateDocument } from '@/lib/ai/tools/update-document';
-// import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
-// import { getWeather } from '@/lib/ai/tools/get-weather';
+import { createDocument } from '@/lib/ai/tools/create-document';
+import { updateDocument } from '@/lib/ai/tools/update-document';
+import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
+import { getWeather } from '@/lib/ai/tools/get-weather';
 import { isProductionEnvironment } from '@/lib/constants';
-// import { myProvider } from '@/lib/ai/providers';
-import { mastra } from '@/mastra';
+import { myProvider } from '@/lib/ai/providers';
+import { entitlementsByUserType } from '@/lib/ai/entitlements';
+import { postRequestBodySchema, type PostRequestBody } from './schema';
 
 export const maxDuration = 60;
 
+import { mastra } from '@/mastra';
 const agent = mastra.getAgent('agent');
 
+
 export async function POST(request: Request) {
-  const encoder = new TextEncoder();
+  let requestBody: PostRequestBody;
+
   try {
-    const {
-      id,
-      messages,
-      // selectedChatModel,
-    }: {
-      id: string;
-      messages: Array<UIMessage>;
-      selectedChatModel: string;
-    } = await request.json();
+    const json = await request.json();
+    requestBody = postRequestBodySchema.parse(json);
+  } catch (_) {
+    return new Response('Invalid request body', { status: 400 });
+  }
+
+  try {
+    const { id, message, selectedChatModel } = requestBody;
 
     const session = await auth();
 
-    if (!session || !session.user || !session.user.id) {
+    if (!session?.user) {
       return new Response('Unauthorized', { status: 401 });
     }
 
-    const userMessage = getMostRecentUserMessage(messages);
+    const userType: UserType = session.user.type;
 
-    if (!userMessage) {
-      return new Response('No user message found', { status: 400 });
+    const messageCount = await getMessageCountByUserId({
+      id: session.user.id,
+      differenceInHours: 24,
+    });
+
+    if (messageCount > entitlementsByUserType[userType].maxMessagesPerDay) {
+      return new Response(
+        'You have exceeded your maximum number of messages for the day! Please try again later.',
+        {
+          status: 429,
+        },
+      );
     }
 
     const chat = await getChatById({ id });
 
     if (!chat) {
       const title = await generateTitleFromUserMessage({
-        message: userMessage,
+        message,
       });
 
       await saveChat({ id, userId: session.user.id, title });
     } else {
       if (chat.userId !== session.user.id) {
-        return new Response('Unauthorized', { status: 401 });
+        return new Response('Forbidden', { status: 403 });
       }
     }
+
+    const previousMessages = await getMessagesByChatId({ id });
+
+    const messages = appendClientMessage({
+      // @ts-expect-error: todo add type conversion from DBMessage[] to UIMessage[]
+      messages: previousMessages,
+      message,
+    });
 
     await saveMessages({
       messages: [
         {
           chatId: id,
-          id: userMessage.id,
+          id: message.id,
           role: 'user',
-          parts: userMessage.parts,
-          attachments: userMessage.experimental_attachments ?? [],
+          parts: message.parts,
+          attachments: message.experimental_attachments ?? [],
           createdAt: new Date(),
         },
       ],
     });
 
-    const userMessageContent = userMessage.parts
-        .filter((part): part is Extract<UIMessage['parts'][number], { type: 'text' }> => part.type === 'text')
-        .map((part) => part.text)
-        .join('\n');
-
     return createDataStreamResponse({
       execute: async (dataStream) => {
-        const streamResult = await agent.stream(
-          [userMessageContent],
+        const result = await agent.stream(
+          messages,
           { 
             runId: id, 
             experimental_generateMessageId: generateUUID, // assistantId needed UUID format to save to pg
@@ -110,7 +123,7 @@ export async function POST(request: Request) {
                   }
   
                   const [, assistantMessage] = appendResponseMessages({
-                    messages: [userMessage],
+                    messages: [message],
                     responseMessages: response.messages,
                   });
   
@@ -135,19 +148,17 @@ export async function POST(request: Request) {
           },
         );
 
-        streamResult.consumeStream();
+        result.consumeStream();
 
-        streamResult.mergeIntoDataStream(dataStream, {
+        result.mergeIntoDataStream(dataStream, {
           sendReasoning: true,
         });
       },
-      onError: (error) => {
-        console.error("DataStreamResponse error:", error);
-        return 'Oops, an error occurred initiating the chat stream!';
+      onError: () => {
+        return 'Oops, an error occurred!';
       },
     });
-  } catch (error) {
-     console.error("POST handler error:", error);
+  } catch (_) {
     return new Response('An error occurred while processing your request!', {
       status: 500,
     });
@@ -164,22 +175,21 @@ export async function DELETE(request: Request) {
 
   const session = await auth();
 
-  if (!session || !session.user) {
+  if (!session?.user?.id) {
     return new Response('Unauthorized', { status: 401 });
   }
 
   try {
     const chat = await getChatById({ id });
 
-    if (!chat || chat.userId !== session.user.id) {
-      return new Response('Unauthorized or Chat Not Found', { status: 401 });
+    if (chat.userId !== session.user.id) {
+      return new Response('Forbidden', { status: 403 });
     }
 
-    await deleteChatById({ id });
+    const deletedChat = await deleteChatById({ id });
 
-    return new Response('Chat deleted', { status: 200 });
+    return Response.json(deletedChat, { status: 200 });
   } catch (error) {
-     console.error("DELETE handler error:", error);
     return new Response('An error occurred while processing your request!', {
       status: 500,
     });

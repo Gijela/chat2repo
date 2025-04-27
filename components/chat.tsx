@@ -12,9 +12,10 @@ import { MultimodalInput } from './multimodal-input';
 import { Messages } from './messages';
 import type { VisibilityType } from './visibility-selector';
 import { useArtifactSelector } from '@/hooks/use-artifact';
-import { toast } from 'sonner';
 import { unstable_serialize } from 'swr/infinite';
 import { getChatHistoryPaginationKey } from './sidebar-history';
+import { toast } from './toast';
+import type { Session } from 'next-auth';
 import { RepoParams } from '@/app/(chat)/[owner]/[repo]/[[...slug]]/page';
 
 export function Chat({
@@ -23,6 +24,7 @@ export function Chat({
   selectedChatModel,
   selectedVisibilityType,
   isReadonly,
+  session,
   repoInfo,
 }: {
   id: string;
@@ -30,6 +32,7 @@ export function Chat({
   selectedChatModel: string;
   selectedVisibilityType: VisibilityType;
   isReadonly: boolean;
+  session: Session;
   repoInfo?: RepoParams;
 }) {
   const { mutate } = useSWRConfig();
@@ -46,16 +49,23 @@ export function Chat({
     reload,
   } = useChat({
     id,
-    body: { id, selectedChatModel: selectedChatModel },
     initialMessages,
     experimental_throttle: 100,
     sendExtraMessageFields: true,
     generateId: generateUUID,
+    experimental_prepareRequestBody: (body) => ({
+      id,
+      message: body.messages.at(-1),
+      selectedChatModel,
+    }),
     onFinish: () => {
       mutate(unstable_serialize(getChatHistoryPaginationKey));
     },
-    onError: () => {
-      toast.error('An error occurred, please try again!');
+    onError: (error) => {
+      toast({
+        type: 'error',
+        description: error.message,
+      });
     },
   });
 
@@ -88,6 +98,7 @@ export function Chat({
           selectedModelId={selectedChatModel}
           selectedVisibilityType={selectedVisibilityType}
           isReadonly={isReadonly}
+          session={session}
         />
 
         <Messages

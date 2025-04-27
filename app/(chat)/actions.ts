@@ -1,14 +1,13 @@
 'use server';
 
-import { generateText, Message } from 'ai';
+import { generateText, type UIMessage } from 'ai';
 import { cookies } from 'next/headers';
-
 import {
   deleteMessagesByChatIdAfterTimestamp,
   getMessageById,
   updateChatVisiblityById,
 } from '@/lib/db/queries';
-import { VisibilityType } from '@/components/visibility-selector';
+import type { VisibilityType } from '@/components/visibility-selector';
 import { myProvider } from '@/lib/ai/providers';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 
@@ -29,7 +28,7 @@ const deepseekModel = deepseek.chatModel('deepseek-chat') as any;
 export async function generateTitleFromUserMessage({
   message,
 }: {
-  message: Message;
+  message: UIMessage;
 }) {
   const { text: title } = await generateText({
     // model: myProvider.languageModel('title-model'),

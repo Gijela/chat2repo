@@ -15,7 +15,7 @@ export interface RepoParams {
 export default async function Page({ params }: { params: Promise<RepoParams> }) {
   const session = await auth();
   if (!session) {
-    redirect('/login');
+    redirect('/api/auth/guest');
   }
 
   const id = generateUUID();
@@ -35,6 +35,7 @@ export default async function Page({ params }: { params: Promise<RepoParams> }) 
           selectedChatModel={DEFAULT_CHAT_MODEL}
           selectedVisibilityType="private"
           isReadonly={false}
+          session={session}
         />
         <DataStreamHandler id={id} />
       </>
@@ -51,6 +52,7 @@ export default async function Page({ params }: { params: Promise<RepoParams> }) 
         selectedChatModel={modelIdFromCookie.value}
         selectedVisibilityType="private"
         isReadonly={false}
+        session={session}
       />
       <DataStreamHandler id={id} />
     </>
