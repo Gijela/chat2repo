@@ -16,7 +16,7 @@ import { unstable_serialize } from 'swr/infinite';
 import { getChatHistoryPaginationKey } from './sidebar-history';
 import { toast } from './toast';
 import type { Session } from 'next-auth';
-import { RepoParams } from '@/app/(chat)/[owner]/[repo]/[[...slug]]/page';
+import type { RepoParams } from '@/app/(chat)/[owner]/[repo]/[[...slug]]/page';
 
 export function Chat({
   id,
