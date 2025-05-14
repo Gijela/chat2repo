@@ -43,8 +43,7 @@ export const sendMessage = new Tool({
           keywords: [],
           repo_names: [repo_name],
           additional_context: '',
-          query_id:
-            '-1-ascii-2-3_3556fa63-aae5-4f1f-b85c-11a8be8113da' || runId,
+          query_id: runId,
           use_notes: false,
         }),
       });
