@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import useSWR, { useSWRConfig } from 'swr';
 import { ChatHeader } from '@/components/chat-header';
 import type { Vote } from '@/lib/db/schema';
-import { fetcher, generateUUID } from '@/lib/utils';
+import { fetcher, fetchWithErrorHandlers, generateUUID } from '@/lib/utils';
 import { Artifact } from './artifact';
 import { MultimodalInput } from './multimodal-input';
 import { Messages } from './messages';
@@ -18,6 +18,8 @@ import { toast } from './toast';
 import type { Session } from 'next-auth';
 import { useSearchParams } from 'next/navigation';
 import { useChatVisibility } from '@/hooks/use-chat-visibility';
+import { useAutoResume } from '@/hooks/use-auto-resume';
+import { ChatSDKError } from '@/lib/errors';
 import type { RepoParams } from '@/app/(chat)/[owner]/[repo]/[[...slug]]/page';
 
 export function Chat({
@@ -57,12 +59,14 @@ export function Chat({
     stop,
     reload,
     experimental_resume,
+    data,
   } = useChat({
     id,
     initialMessages,
     experimental_throttle: 100,
     sendExtraMessageFields: true,
     generateId: generateUUID,
+    fetch: fetchWithErrorHandlers,
     experimental_prepareRequestBody: (body) => ({
       id,
       message: body.messages.at(-1),
@@ -73,21 +77,14 @@ export function Chat({
       mutate(unstable_serialize(getChatHistoryPaginationKey));
     },
     onError: (error) => {
-      toast({
-        type: 'error',
-        description: error.message,
-      });
+      if (error instanceof ChatSDKError) {
+        toast({
+          type: 'error',
+          description: error.message,
+        });
+      }
     },
   });
-
-  useEffect(() => {
-    if (autoResume) {
-      experimental_resume();
-    }
-
-    // note: this hook has no dependencies since it only needs to run once
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const searchParams = useSearchParams();
   const query = searchParams.get('query');
@@ -113,6 +110,14 @@ export function Chat({
 
   const [attachments, setAttachments] = useState<Array<Attachment>>([]);
   const isArtifactVisible = useArtifactSelector((state) => state.isVisible);
+
+  useAutoResume({
+    autoResume,
+    initialMessages,
+    experimental_resume,
+    data,
+    setMessages,
+  });
 
   useEffect(() => {
     if (repoInfo && status === 'ready' && messages.length <= initialMessages.length) {
