@@ -32,10 +32,11 @@ export default async function Page({ params }: { params: Promise<RepoParams> }) 
           id={id}
           repoInfo={repoInfo}
           initialMessages={[]}
-          selectedChatModel={DEFAULT_CHAT_MODEL}
-          selectedVisibilityType="private"
+          initialChatModel={DEFAULT_CHAT_MODEL}
+          initialVisibilityType="private"
           isReadonly={false}
           session={session}
+          autoResume={false}
         />
         <DataStreamHandler id={id} />
       </>
@@ -49,10 +50,11 @@ export default async function Page({ params }: { params: Promise<RepoParams> }) 
         id={id}
         repoInfo={repoInfo}
         initialMessages={[]}
-        selectedChatModel={modelIdFromCookie.value}
-        selectedVisibilityType="private"
+        initialChatModel={modelIdFromCookie.value}
+        initialVisibilityType="private"
         isReadonly={false}
         session={session}
+        autoResume={false}
       />
       <DataStreamHandler id={id} />
     </>
