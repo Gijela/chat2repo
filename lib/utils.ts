@@ -75,6 +75,10 @@ export function getTrailingMessageId({
   return trailingMessage.id;
 }
 
+export function sanitizeText(text: string) {
+  return text.replace('<has_function_call>', '');
+}
+
 export const gh = new Octokit({
   auth: process.env.GITHUB_TOKEN!,
 });
